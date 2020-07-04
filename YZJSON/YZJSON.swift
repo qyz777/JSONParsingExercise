@@ -26,6 +26,8 @@ enum ReturnType: Int {
 }
 
 struct JSONValue {
+    //当type为number类型时n为JSON数字的数值
+    var n: Double = 0
     var type: JSONType
 }
 
@@ -81,55 +83,87 @@ func parseValue(context: inout JSONContext, value: inout JSONValue) -> ReturnTyp
     guard let c = context.current else { return .expectValue }
     switch c {
     case "n":
-        return parseNull(context: &context, value: &value)
+        return parseLiteral(context: &context, value: &value, literal: "null", type: .null)
     case "f":
-        return parseFalse(context: &context, value: &value)
+        return parseLiteral(context: &context, value: &value, literal: "false", type: .false)
     case "t":
-        return parseTrue(context: &context, value: &value)
+        return parseLiteral(context: &context, value: &value, literal: "true", type: .true)
     default:
-        return .invalidValue
+        return parseNumber(context: &context, value: &value)
     }
 }
 
-func parseNull(context: inout JSONContext, value: inout JSONValue) -> ReturnType {
-    expect(context: &context, char: "n")
-    let index = context.index
-    guard context.canMove(3) else {
-        return .invalidValue
+/*
+ number = [ "-" ] int [ frac ] [ exp ]
+ int = "0" / digit1-9 *digit
+ frac = "." 1*digit
+ exp = ("e" / "E") ["-" / "+"] 1*digit
+ */
+func parseNumber(context: inout JSONContext, value: inout JSONValue) -> ReturnType {
+    let start = context.index
+    var c = context.current
+    guard c != nil else { return .expectValue }
+    if c == "-" {
+        //解析负号
+        context.next()
     }
-    if context.JSON[index] != "u" || context.JSON[index + 1] != "l" || context.JSON[index + 2] != "l" {
-        return .invalidValue
+    c = context.current
+    guard c != nil else { return .expectValue }
+    if c == "0" {
+        //0后面不能再直接跟数字了
+        context.next()
+    } else {
+        //解析数字
+        guard c!.isNumber else { return .invalidValue }
+        while context.current != nil && context.current!.isNumber {
+            context.next()
+        }
     }
-    context.move(3)
-    value.type = .null
+    if context.current == "." {
+        //解析小数
+        context.next()
+        guard context.current?.isNumber ?? false else { return .invalidValue }
+        while context.current != nil && context.current!.isNumber {
+            context.next()
+        }
+    }
+    
+    if context.current == "e" || context.current == "E" {
+        //解析科学计数法
+        context.next()
+        if context.current == "+" || context.current == "-" {
+            context.next()
+        }
+        guard context.current?.isNumber ?? false else { return .invalidValue }
+        while context.current != nil && context.current!.isNumber {
+            context.next()
+        }
+    }
+    let end = context.index
+    let string = String(context.JSON[start..<end])
+    //如果number是nil说明数字大到超过Double范围
+    guard let number = Double(string) else { return .invalidValue }
+    value.n = number
+    value.type = .number
     return .ok
 }
 
-func parseFalse(context: inout JSONContext, value: inout JSONValue) -> ReturnType {
-    expect(context: &context, char: "f")
+func parseLiteral(context: inout JSONContext, value: inout JSONValue, literal: String, type: JSONType) -> ReturnType {
+    expect(context: &context, char: literal.first!)
     let index = context.index
-    guard context.canMove(4) else {
-        return .expectValue
-    }
-    if context.JSON[index] != "a" || context.JSON[index + 1] != "l" || context.JSON[index + 2] != "s" || context.JSON[index + 3] != "e" {
+    guard context.canMove(literal.count - 1) else {
         return .invalidValue
     }
-    context.move(4)
-    value.type = .false
-    return .ok
-}
-
-func parseTrue(context: inout JSONContext, value: inout JSONValue) -> ReturnType {
-    expect(context: &context, char: "t")
-    let index = context.index
-    guard context.canMove(3) else {
-        return .expectValue
+    let array = Array(literal)
+    var j = 1
+    for i in index..<(index + array.count - 1) {
+        if context.JSON[i] != array[j] {
+            return .invalidValue
+        }
+        j += 1
     }
-    if context.JSON[index] != "r" || context.JSON[index + 1] != "u" || context.JSON[index + 2] != "e" {
-        return .invalidValue
-    }
-    context.move(3)
-    value.type = .true
+    context.move(literal.count - 1)
+    value.type = type
     return .ok
 }
 
