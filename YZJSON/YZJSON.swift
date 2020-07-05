@@ -23,17 +23,27 @@ enum ReturnType: Int {
     case expectValue
     case invalidValue
     case rootNotSingular
+    case numberTooBig
+    case missQuotationMark
+    case invalidStringEscape
 }
 
 struct JSONValue {
-    //当type为number类型时n为JSON数字的数值
+    
+    /// 当type为number类型时n为JSON数字的数值
     var n: Double = 0
+    
+    /// 当type为string类型时s为JSON的字符串
+    var s: String = ""
+    
     var type: JSONType
 }
 
 struct JSONContext {
     var JSON: [Character]
     var index: Int = 0
+    
+    var queue: [Character] = []
     
     var current: Character? {
         guard index < JSON.count else {
@@ -88,8 +98,55 @@ func parseValue(context: inout JSONContext, value: inout JSONValue) -> ReturnTyp
         return parseLiteral(context: &context, value: &value, literal: "false", type: .false)
     case "t":
         return parseLiteral(context: &context, value: &value, literal: "true", type: .true)
+    case "\"":
+        return parseString(context: &context, value: &value)
     default:
         return parseNumber(context: &context, value: &value)
+    }
+}
+
+func parseString(context: inout JSONContext, value: inout JSONValue) -> ReturnType {
+    expect(context: &context, char: "\"")
+    while true {
+        guard let c = context.current else { return .missQuotationMark }
+        switch c {
+        case "\"":
+            value.s = String(context.queue)
+            value.type = .string
+            context.next()
+            return .ok
+        case "\\":
+            context.next()
+            guard let nc = context.current else { return .invalidStringEscape }
+            switch nc {
+            case "\"":
+                context.queue.append("\"")
+                context.next()
+            case "\\":
+                context.queue.append("\\")
+                context.next()
+            case "/":
+                context.queue.append("/")
+                context.next()
+            case "n":
+                context.queue.append("\n")
+                context.next()
+            case "r":
+                context.queue.append("\r")
+                context.next()
+            case "t":
+                context.queue.append("\t")
+                context.next()
+            default:
+                return .invalidStringEscape
+            }
+        default:
+            if c.asciiValue ?? 0 < 20 {
+                return .invalidStringEscape
+            }
+            context.queue.append(c)
+            context.next()
+        }
     }
 }
 
@@ -142,7 +199,7 @@ func parseNumber(context: inout JSONContext, value: inout JSONValue) -> ReturnTy
     let end = context.index
     let string = String(context.JSON[start..<end])
     //如果number是nil说明数字大到超过Double范围
-    guard let number = Double(string) else { return .invalidValue }
+    guard let number = Double(string) else { return .numberTooBig }
     value.n = number
     value.type = .number
     return .ok
