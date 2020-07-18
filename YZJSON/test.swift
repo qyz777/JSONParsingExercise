@@ -71,6 +71,7 @@ func test_parse() {
     test_parseInvalidValue()
     
     test_string()
+    test_parseArray()
 }
 
 func test_string() {
@@ -93,6 +94,35 @@ func test_string() {
     TEST_STRING("€", "\"\\u20AC\""); /* Euro sign U+20AC */
     TEST_STRING("𝄞", "\"\\uD834\\uDD1E\"");  /* G clef sign U+1D11E */
     TEST_STRING("𝄞", "\"\\ud834\\udd1e\"");  /* G clef sign U+1D11E */
+}
+
+func test_parseArray() {
+    var v1 = JSONValue(type: .null)
+    EXPECT_INT(ReturnType.ok.rawValue, parse(JSON: "[ null , false , true , 123 , \"abc\" ]", value: &v1).rawValue)
+    EXPECT_INT(JSONType.array.rawValue, v1.type.rawValue)
+    EXPECT_INT(JSONType.null.rawValue, v1.array[0].type.rawValue)
+    EXPECT_INT(JSONType.false.rawValue, v1.array[1].type.rawValue)
+    EXPECT_INT(JSONType.true.rawValue, v1.array[2].type.rawValue)
+    EXPECT_INT(JSONType.number.rawValue, v1.array[3].type.rawValue)
+    EXPECT_INT(JSONType.string.rawValue, v1.array[4].type.rawValue)
+    EXPECT_DOUBLE(123, v1.array[3].n)
+    EXPECT_STRING("abc", v1.array[4].s)
+    
+    var v2 = JSONValue(type: .null)
+    EXPECT_INT(ReturnType.ok.rawValue, parse(JSON: "[ [ ] , [ 0 ] , [ 0 , 1 ] , [ 0 , 1 , 2 ] ]", value: &v2).rawValue)
+    EXPECT_INT(JSONType.array.rawValue, v2.type.rawValue)
+    for i in 0..<4 {
+        let a = v2.array[i]
+        EXPECT_INT(JSONType.array.rawValue, a.type.rawValue)
+        for j in 0..<i {
+            let e = a.array[j]
+            EXPECT_INT(JSONType.number.rawValue, e.type.rawValue)
+        }
+    }
+    
+    var v3 = JSONValue(type: .null)
+    EXPECT_INT(ReturnType.parseMissCommaOrSquareBracket.rawValue, parse(JSON: "[ [ ] , [ 0 ] , [ 0 , 1 ] , [ 0 , 1 , 2 ] ", value: &v3).rawValue)
+    EXPECT_INT(JSONType.null.rawValue, v3.type.rawValue)
 }
 
 func test_parseNumber() {

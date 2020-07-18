@@ -28,6 +28,7 @@ enum ReturnType: Int {
     case invalidStringEscape
     case invalidUnicodeHex
     case invalidUnicodeSurrogate
+    case parseMissCommaOrSquareBracket
 }
 
 struct JSONValue {
@@ -38,6 +39,9 @@ struct JSONValue {
     /// 当type为string类型时s为JSON的字符串
     var s: String = ""
     
+    /// 当type为array类型时array为JSON数组
+    var array: [JSONValue] = []
+    
     var type: JSONType
 }
 
@@ -46,6 +50,8 @@ struct JSONContext {
     var index: Int = 0
     
     var queue: [Character] = []
+    
+    var arrayQueue: [JSONValue] = []
     
     var current: Character? {
         guard index < JSON.count else {
@@ -102,6 +108,8 @@ func parseValue(context: inout JSONContext, value: inout JSONValue) -> ReturnTyp
         return parseLiteral(context: &context, value: &value, literal: "true", type: .true)
     case "\"":
         return parseString(context: &context, value: &value)
+    case "[":
+        return parseArray(context: &context, value: &value)
     default:
         return parseNumber(context: &context, value: &value)
     }
@@ -185,6 +193,44 @@ func parseHex4(context: inout JSONContext) -> Int? {
         }
     }
     return n
+}
+
+/*
+ 
+ array = %x5B ws [ value *( ws %x2C ws value ) ] ws %x5D
+ 
+ */
+func parseArray(context: inout JSONContext, value: inout JSONValue) -> ReturnType {
+    expect(context: &context, char: "[")
+    parseWhitespace(context: &context)
+    if let c = context.current, c == "]" {
+        //空数组
+        context.next()
+        value.type = .array
+        return .ok
+    }
+    var length = 0
+    while true {
+        var e = JSONValue(type: .null)
+        let r = parseValue(context: &context, value: &e)
+        guard r == .ok else { return r }
+        context.arrayQueue.append(e)
+        length += 1
+        parseWhitespace(context: &context)
+        if let c = context.current, c == "," {
+            context.next()
+            parseWhitespace(context: &context)
+        } else if let c = context.current, c == "]" {
+            context.next()
+            value.type = .array
+            let count = context.arrayQueue.count
+            value.array.append(contentsOf: context.arrayQueue.suffix(length))
+            context.arrayQueue.removeSubrange(count - length..<count)
+            return .ok
+        } else {
+            return .parseMissCommaOrSquareBracket
+        }
+    }
 }
 
 /*
