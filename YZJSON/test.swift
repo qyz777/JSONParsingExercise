@@ -86,6 +86,13 @@ func test_string() {
     TEST_STRING("Hello", "\"Hello\"")
     TEST_STRING("Hello\nWorld", "\"Hello\\nWorld\"")
     TEST_STRING("\" \\ / \n \r \t", "\"\\\" \\\\ \\/ \\n \\r \\t\"")
+    
+    TEST_STRING("Hello\0World", "\"Hello\\u0000World\"");
+    TEST_STRING("$", "\"\\u0024\"");         /* Dollar sign U+0024 */
+    TEST_STRING("¢", "\"\\u00A2\"");     /* Cents sign U+00A2 */
+    TEST_STRING("€", "\"\\u20AC\""); /* Euro sign U+20AC */
+    TEST_STRING("𝄞", "\"\\uD834\\uDD1E\"");  /* G clef sign U+1D11E */
+    TEST_STRING("𝄞", "\"\\ud834\\udd1e\"");  /* G clef sign U+1D11E */
 }
 
 func test_parseNumber() {

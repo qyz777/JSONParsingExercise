@@ -26,6 +26,8 @@ enum ReturnType: Int {
     case numberTooBig
     case missQuotationMark
     case invalidStringEscape
+    case invalidUnicodeHex
+    case invalidUnicodeSurrogate
 }
 
 struct JSONValue {
@@ -137,6 +139,28 @@ func parseString(context: inout JSONContext, value: inout JSONValue) -> ReturnTy
             case "t":
                 context.queue.append("\t")
                 context.next()
+            case "u":
+                context.next()
+                guard var u = parseHex4(context: &context) else { return .invalidValue }
+                if 0xD000 <= u && u <= 0xDBFF {
+                    //是高代理项
+                    if let c = context.current, c != "\\" {
+                        return .invalidUnicodeSurrogate
+                    }
+                    context.next()
+                    if let c = context.current, c != "u" {
+                        return .invalidUnicodeSurrogate
+                    }
+                    context.next()
+                    //解析低代理项
+                    guard let u2 = parseHex4(context: &context) else { return .invalidUnicodeHex }
+                    if u2 < 0xDC00 || u2 > 0xDFFF {
+                        return .invalidUnicodeSurrogate
+                    }
+                    //计算出码点
+                    u = (((u - 0xD800) << 10) | (u2 - 0xDC00)) + 0x10000
+                }
+                context.queue.append(Character(Unicode.Scalar(u)!))
             default:
                 return .invalidStringEscape
             }
@@ -148,6 +172,19 @@ func parseString(context: inout JSONContext, value: inout JSONValue) -> ReturnTy
             context.next()
         }
     }
+}
+
+func parseHex4(context: inout JSONContext) -> Int? {
+    var n = 0
+    for i in 1...4 {
+        if let c = context.current, c.isHexDigit {
+            n += c.hexDigitValue! * Int(powf(16, 4 - Float(i)))
+            context.next()
+        } else {
+            return nil
+        }
+    }
+    return n
 }
 
 /*
