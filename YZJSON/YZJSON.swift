@@ -29,6 +29,9 @@ enum ReturnType: Int {
     case invalidUnicodeHex
     case invalidUnicodeSurrogate
     case parseMissCommaOrSquareBracket
+    case parseMissKey
+    case parseMissColon
+    case parseMissCommaOrCuryBracket
 }
 
 struct JSONValue {
@@ -42,7 +45,16 @@ struct JSONValue {
     /// 当type为array类型时array为JSON数组
     var array: [JSONValue] = []
     
+    /// 当type为Object类型时member为JSON的kv键值对
+    var members: [JSONMember] = []
+    
     var type: JSONType
+}
+
+/// 在Object中使用
+struct JSONMember {
+    var key: String
+    var value: JSONValue
 }
 
 struct JSONContext {
@@ -52,6 +64,8 @@ struct JSONContext {
     var queue: [Character] = []
     
     var arrayQueue: [JSONValue] = []
+    
+    var objectQueue: [JSONMember] = []
     
     var current: Character? {
         guard index < JSON.count else {
@@ -110,19 +124,28 @@ func parseValue(context: inout JSONContext, value: inout JSONValue) -> ReturnTyp
         return parseString(context: &context, value: &value)
     case "[":
         return parseArray(context: &context, value: &value)
+    case "{":
+        return parseObject(context: &context, value: &value)
     default:
         return parseNumber(context: &context, value: &value)
     }
 }
 
 func parseString(context: inout JSONContext, value: inout JSONValue) -> ReturnType {
+    let r = parseString(context: &context)
+    guard r == .ok else { return r }
+    value.s = String(context.queue)
+    value.type = .string
+    context.queue.removeAll()
+    return r
+}
+
+func parseString(context: inout JSONContext) -> ReturnType {
     expect(context: &context, char: "\"")
     while true {
         guard let c = context.current else { return .missQuotationMark }
         switch c {
         case "\"":
-            value.s = String(context.queue)
-            value.type = .string
             context.next()
             return .ok
         case "\\":
@@ -229,6 +252,61 @@ func parseArray(context: inout JSONContext, value: inout JSONValue) -> ReturnTyp
             return .ok
         } else {
             return .parseMissCommaOrSquareBracket
+        }
+    }
+}
+
+/*
+ 
+ member = string ws %x3A ws value
+ object = %x7B ws [ member *( ws %x2C ws member ) ] ws %x7D
+ 
+ */
+
+func parseObject(context: inout JSONContext, value: inout JSONValue) -> ReturnType {
+    expect(context: &context, char: "{")
+    parseWhitespace(context: &context)
+    if let c = context.current, c == "}" {
+        //空object
+        context.next()
+        value.type = .object
+        return .ok
+    }
+    var length = 0
+    while true {
+        var m = JSONMember(key: "", value: JSONValue(type: .null))
+        parseWhitespace(context: &context)
+        //解析key
+        guard let c = context.current, c == "\"" else { return .parseMissKey }
+        let keyR = parseString(context: &context)
+        guard keyR == .ok else { return keyR }
+        m.key = String(context.queue)
+        context.queue.removeAll()
+        parseWhitespace(context: &context)
+        //解析`:`
+        guard let colon = context.current, colon == ":" else { return .parseMissColon }
+        context.next()
+        parseWhitespace(context: &context)
+        //解析value
+        let r = parseValue(context: &context, value: &m.value)
+        guard r == .ok else { return r }
+        context.objectQueue.append(m)
+        length += 1
+        parseWhitespace(context: &context)
+        if let comma = context.current, comma == "," {
+            //解析`,`
+            context.next()
+        } else if let rcb = context.current, rcb == "}" {
+            //解析`}`
+            context.next()
+            value.type = .object
+            let count = context.objectQueue.count
+            value.members.append(contentsOf: context.objectQueue.suffix(length))
+            context.objectQueue.removeSubrange(count - length..<count)
+            return .ok
+        } else {
+            //缺失报错
+            return .parseMissCommaOrCuryBracket
         }
     }
 }

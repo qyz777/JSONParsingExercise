@@ -66,12 +66,13 @@ func test_parse() {
     test_parseExpectValue()
     test_parseInvalidValue()
     test_parseRootNotSingular()
-    
+
     test_parseNumber()
     test_parseInvalidValue()
-    
+
     test_string()
     test_parseArray()
+    test_object()
 }
 
 func test_string() {
@@ -94,6 +95,39 @@ func test_string() {
     TEST_STRING("€", "\"\\u20AC\""); /* Euro sign U+20AC */
     TEST_STRING("𝄞", "\"\\uD834\\uDD1E\"");  /* G clef sign U+1D11E */
     TEST_STRING("𝄞", "\"\\ud834\\udd1e\"");  /* G clef sign U+1D11E */
+}
+
+func test_object() {
+    var v = JSONValue(type: .null)
+    EXPECT_INT(ReturnType.ok.rawValue, parse(JSON: "{ }", value: &v).rawValue)
+    EXPECT_INT(JSONType.object.rawValue, v.type.rawValue)
+    
+    v = JSONValue(type: .null)
+    EXPECT_INT(ReturnType.ok.rawValue, parse(JSON: "{ \"n\" : null , \"f\": false , \"t\": true , \"i\": 123 , \"s\": \"abc\" , \"a\": [ 1 , 2 , 3] , \"o\": { \"1\" : 1 , \"2\" : 2 , \"3\" : 3 } }", value: &v).rawValue)
+    EXPECT_INT(JSONType.object.rawValue, v.type.rawValue)
+    EXPECT_STRING("n", v.members[0].key)
+    EXPECT_INT(JSONType.null.rawValue, v.members[0].value.type.rawValue)
+    EXPECT_STRING("f", v.members[1].key)
+    EXPECT_INT(JSONType.false.rawValue, v.members[1].value.type.rawValue)
+    EXPECT_STRING("t", v.members[2].key)
+    EXPECT_INT(JSONType.true.rawValue, v.members[2].value.type.rawValue)
+    EXPECT_STRING("i", v.members[3].key)
+    EXPECT_INT(JSONType.number.rawValue, v.members[3].value.type.rawValue)
+    EXPECT_STRING("s", v.members[4].key)
+    EXPECT_INT(JSONType.string.rawValue, v.members[4].value.type.rawValue)
+    EXPECT_STRING("a", v.members[5].key)
+    EXPECT_INT(JSONType.array.rawValue, v.members[5].value.type.rawValue)
+    for i in 0..<3 {
+        EXPECT_INT(JSONType.number.rawValue, v.members[5].value.array[i].type.rawValue)
+        EXPECT_DOUBLE(Double(i + 1), v.members[5].value.array[i].n)
+    }
+    EXPECT_STRING("o", v.members[6].key)
+    EXPECT_INT(JSONType.object.rawValue, v.members[6].value.type.rawValue)
+    let o = v.members[6].value
+    for i in 0..<3 {
+        EXPECT_INT(JSONType.number.rawValue, o.members[i].value.type.rawValue)
+        EXPECT_DOUBLE(Double(i + 1), o.members[i].value.n)
+    }
 }
 
 func test_parseArray() {
