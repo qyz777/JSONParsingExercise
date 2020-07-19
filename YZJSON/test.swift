@@ -54,6 +54,13 @@ func TEST_STRING(_ expect: String, _ JSON: String) {
     EXPECT_STRING(expect, v.s)
 }
 
+func TEST_ROUNDTRIP(_ json: String) {
+    var v = JSONValue(type: .null)
+    EXPECT_INT(ReturnType.ok.rawValue, parse(JSON: json, value: &v).rawValue)
+    let json2 = stringify(value: &v)
+    EXPECT_STRING(json, json2)
+}
+
 // MARK: Test
 
 func test() {
@@ -73,6 +80,7 @@ func test_parse() {
     test_string()
     test_parseArray()
     test_object()
+    test_stringify()
 }
 
 func test_string() {
@@ -89,12 +97,12 @@ func test_string() {
     TEST_STRING("Hello\nWorld", "\"Hello\\nWorld\"")
     TEST_STRING("\" \\ / \n \r \t", "\"\\\" \\\\ \\/ \\n \\r \\t\"")
     
-    TEST_STRING("Hello\0World", "\"Hello\\u0000World\"");
-    TEST_STRING("$", "\"\\u0024\"");         /* Dollar sign U+0024 */
-    TEST_STRING("¢", "\"\\u00A2\"");     /* Cents sign U+00A2 */
-    TEST_STRING("€", "\"\\u20AC\""); /* Euro sign U+20AC */
-    TEST_STRING("𝄞", "\"\\uD834\\uDD1E\"");  /* G clef sign U+1D11E */
-    TEST_STRING("𝄞", "\"\\ud834\\udd1e\"");  /* G clef sign U+1D11E */
+    TEST_STRING("Hello\0World", "\"Hello\\u0000World\"")
+    TEST_STRING("$", "\"\\u0024\"")         /* Dollar sign U+0024 */
+    TEST_STRING("¢", "\"\\u00A2\"")     /* Cents sign U+00A2 */
+    TEST_STRING("€", "\"\\u20AC\"") /* Euro sign U+20AC */
+    TEST_STRING("𝄞", "\"\\uD834\\uDD1E\"")  /* G clef sign U+1D11E */
+    TEST_STRING("𝄞", "\"\\ud834\\udd1e\"")  /* G clef sign U+1D11E */
 }
 
 func test_object() {
@@ -207,4 +215,57 @@ func test_parseInvalidValue() {
 
 func test_parseRootNotSingular() {
     TEST_ERROR(ReturnType.rootNotSingular.rawValue, "null x")
+}
+
+
+func test_stringifyNumber() {
+    TEST_ROUNDTRIP("0.0")
+    TEST_ROUNDTRIP("-0.0")
+    TEST_ROUNDTRIP("1.0")
+    TEST_ROUNDTRIP("-1.0")
+    TEST_ROUNDTRIP("1.5")
+    TEST_ROUNDTRIP("-1.5")
+    TEST_ROUNDTRIP("3.25")
+    TEST_ROUNDTRIP("1e+20")
+    TEST_ROUNDTRIP("1.234e+20")
+    TEST_ROUNDTRIP("1.234e-20")
+    
+    TEST_ROUNDTRIP("1.0000000000000002") /* the smallest number > 1 */
+    TEST_ROUNDTRIP("5e-324") /* minimum denormal */
+    TEST_ROUNDTRIP("-5e-324")
+    TEST_ROUNDTRIP("2.225073858507201e-308")  /* Max subnormal double */
+    TEST_ROUNDTRIP("-2.225073858507201e-308")
+    TEST_ROUNDTRIP("2.2250738585072014e-308")  /* Min normal positive double */
+    TEST_ROUNDTRIP("-2.2250738585072014e-308")
+    TEST_ROUNDTRIP("1.7976931348623157e+308")  /* Max double */
+    TEST_ROUNDTRIP("-1.7976931348623157e+308")
+}
+
+func test_stringifyString() {
+    TEST_ROUNDTRIP("\"\"")
+    TEST_ROUNDTRIP("\"Hello\"")
+    TEST_ROUNDTRIP("\"Hello\\nWorld\"")
+    TEST_ROUNDTRIP("\"\\\" \\\\ / \\n \\r \\t\"")
+    //特殊处理，由于JSON解析是\uxxxx被直接解析，因此这个test不能成功
+//    TEST_ROUNDTRIP("\"Hello\\u2333World\"")
+}
+
+func test_stringifyArray() {
+    TEST_ROUNDTRIP("[]")
+    TEST_ROUNDTRIP("[null,false,true,123,\"abc\",[1,2,3]]")
+}
+
+func test_stringifyObject() {
+    TEST_ROUNDTRIP("{}")
+    TEST_ROUNDTRIP("{\"n\":null,\"f\":false,\"t\":true,\"i\":123,\"s\":\"abc\",\"a\":[1,2,3],\"o\":{\"1\":1,\"2\":2,\"3\":3}}")
+}
+
+func test_stringify() {
+    TEST_ROUNDTRIP("null")
+    TEST_ROUNDTRIP("false")
+    TEST_ROUNDTRIP("true")
+    test_stringifyNumber()
+    test_stringifyString()
+    test_stringifyArray()
+    test_stringifyObject()
 }

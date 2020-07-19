@@ -38,6 +38,7 @@ struct JSONValue {
     
     /// 当type为number类型时n为JSON数字的数值
     var n: Double = 0
+    var isInteger = false
     
     /// 当type为string类型时s为JSON的字符串
     var s: String = ""
@@ -337,8 +338,10 @@ func parseNumber(context: inout JSONContext, value: inout JSONValue) -> ReturnTy
             context.next()
         }
     }
+    var isInteger = true
     if context.current == "." {
         //解析小数
+        isInteger = false
         context.next()
         guard context.current?.isNumber ?? false else { return .invalidValue }
         while context.current != nil && context.current!.isNumber {
@@ -348,6 +351,7 @@ func parseNumber(context: inout JSONContext, value: inout JSONValue) -> ReturnTy
     
     if context.current == "e" || context.current == "E" {
         //解析科学计数法
+        isInteger = false
         context.next()
         if context.current == "+" || context.current == "-" {
             context.next()
@@ -363,6 +367,7 @@ func parseNumber(context: inout JSONContext, value: inout JSONValue) -> ReturnTy
     guard let number = Double(string) else { return .numberTooBig }
     value.n = number
     value.type = .number
+    value.isInteger = isInteger
     return .ok
 }
 
@@ -391,4 +396,81 @@ func expect(context: inout JSONContext, char: Character) {
     }
     assert(c == char, "expect value: \(c)")
     context.next()
+}
+
+//MARK: Stringify
+
+func stringify(value: inout JSONValue) -> String {
+    var context = JSONContext(JSON: [])
+    stringifyValue(context: &context, value: value)
+    return String(context.JSON)
+}
+
+func stringifyValue(context: inout JSONContext, value: JSONValue) {
+    switch value.type {
+    case .null:
+        context.JSON.append(contentsOf: "null")
+    case .false:
+        context.JSON.append(contentsOf: "false")
+    case .true:
+        context.JSON.append(contentsOf: "true")
+    case .number:
+        if value.isInteger && Double(Int.min) <= value.n && value.n <= Double(Int.max) {
+            context.JSON.append(contentsOf: "\(Int(value.n))")
+        } else {
+            context.JSON.append(contentsOf: "\(value.n)")
+        }
+    case .array:
+        stringifyArray(context: &context, value: value)
+    case .string:
+        stringifyString(context: &context, value: value)
+    case .object:
+        stringifyObject(context: &context, value: value)
+    }
+}
+
+func stringifyString(context: inout JSONContext, value: JSONValue) {
+    context.JSON.append("\"")
+    value.s.forEach {
+        switch $0 {
+        case "\"":
+            context.JSON.append(contentsOf: "\\\"")
+        case "\n":
+            context.JSON.append(contentsOf: "\\n")
+        case "\t":
+            context.JSON.append(contentsOf: "\\t")
+        case "\r":
+            context.JSON.append(contentsOf: "\\r")
+        case "\\":
+            context.JSON.append(contentsOf: "\\\\")
+        default:
+            context.JSON.append($0)
+        }
+    }
+    context.JSON.append("\"")
+}
+
+func stringifyArray(context: inout JSONContext, value: JSONValue) {
+    context.JSON.append("[")
+    for i in 0..<value.array.count {
+        let v = value.array[i]
+        stringifyValue(context: &context, value: v)
+        if i != value.array.count - 1 {
+            context.JSON.append(",")
+        }
+    }
+    context.JSON.append("]")
+}
+
+func stringifyObject(context: inout JSONContext, value: JSONValue) {
+    context.JSON.append("{")
+    for i in 0..<value.members.count {
+        let m = value.members[i]
+        context.JSON.append(contentsOf: "\"\(m.key)\":")
+        stringifyValue(context: &context, value:m.value)
+        if i != value.members.count - 1 {
+            context.JSON.append(",")
+        }
+    }
+    context.JSON.append("}")
 }
